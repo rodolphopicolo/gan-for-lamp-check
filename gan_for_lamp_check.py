@@ -215,10 +215,8 @@ def generator_loss(fake_output):
 
 
 def train_step(images, generator, discriminator, generator_optimizer, discriminator_optimizer):
-    print('train_step')
     noise = tf.random.normal([BATCH_SIZE, noise_dim])
 
-    
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
       generated_images = generator(noise, training=True)
       real_output = discriminator(images, training=True)
@@ -268,12 +266,17 @@ def train(dataset, epochs):
 
 
   for epoch in range(epochs):
-    print('loop over epochs')
+    print('Epoch: ', epoch)
     start = time.time()
 
+    iteractions_over_dataset = 0
     for image_batch in dataset:
-      print('loop over dataset')
       train_step(image_batch, generator, discriminator, generator_optimizer, discriminator_optimizer)
+      
+      iteractions_over_dataset += 1
+      print('Iteractions over dataset:', iteractions_over_dataset)
+      if iteractions_over_dataset % 5 == 0:
+        checkpoint.save(file_prefix = checkpoint_prefix)
 
     print('display images for epoch', epoch)
     # Produce images for the GIF as you go
@@ -315,6 +318,3 @@ if __name__ == '__main__':
     keys.sort()
     img = dataset[keys[0]]['img']
     print(img.shape)
-
-
-    
