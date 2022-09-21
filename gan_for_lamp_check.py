@@ -244,7 +244,7 @@ def generate_and_save_images(model, epoch, test_input):
 
   for i in range(predictions.shape[0]):
       pyplot.subplot(4, 4, i+1)
-      pyplot.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
+      pyplot.imshow(predictions[i, :, :, :, 0] * 127.5 + 127.5)
       pyplot.axis('off')
 
   pyplot.savefig('image_at_epoch_{:04d}.png'.format(epoch))
@@ -274,7 +274,6 @@ def train(dataset, epochs):
     for image_batch in dataset:
       print('loop over dataset')
       train_step(image_batch, generator, discriminator, generator_optimizer, discriminator_optimizer)
-      break
 
     print('display images for epoch', epoch)
     # Produce images for the GIF as you go
