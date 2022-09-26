@@ -1,4 +1,4 @@
-# GAN For Lamp Check
+# Lamp Classification GAN
 
 
 ## check_dataset_py

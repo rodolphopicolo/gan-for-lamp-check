@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # https://www.tensorflow.org/tutorials/generative/dcgan
 
+# %%
+
 import tensorflow as tf
 
 import glob
@@ -13,15 +15,38 @@ import PIL
 from tensorflow.keras import layers
 import time
 
+import cv2 as cv
+
+
 from IPython import display
 
 from dataset_loader import load_lamps_dataset, load_mnist_dataset
-
+# %%
 (train_images, train_labels), (_, _) = tf.keras.datasets.mnist.load_data()
+train_labels = None # to constat it is not important
 
-train_images = train_images.reshape(train_images.shape[0], 28, 28, 1).astype('float32')
-train_images = (train_images - 127.5) / 127.5  # Normalize the images to [-1, 1]
+#train_images = train_images[:1]
 
+
+# %%
+
+train_images_rgb = np.zeros(((train_images.shape)+(3,)), dtype=float)
+
+train_images_rgb[:, :, :, 0] = train_images[:, :, :]
+
+train_images_rgb = (train_images_rgb - 127.5) / 127.5
+
+train_images = train_images_rgb
+
+# %%
+
+plt.axis("off")
+img = ((train_images[0] * 127.5) + 127.5).astype(dtype=int)
+plt.imshow(img)
+plt.show()
+
+
+# %%
 BUFFER_SIZE = 60000
 BATCH_SIZE = 256
 
@@ -30,49 +55,117 @@ BATCH_SIZE = 256
 train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
 
 
+# %%
 
+NOISE_DIM = 512
+
+# %%
 
 def make_generator_model():
     model = tf.keras.Sequential()
-    model.add(layers.Dense(7*7*256, use_bias=False, input_shape=(100,)))
+    model.add(layers.Dense(7*7*3*256, use_bias=False, input_shape=(NOISE_DIM,)))
+
+    print('Gen output shape 1:', model.output_shape)
+
     model.add(layers.BatchNormalization())
+
+    print('Gen output shape 2:', model.output_shape)
+
     model.add(layers.LeakyReLU())
 
-    model.add(layers.Reshape((7, 7, 256)))
-    assert model.output_shape == (None, 7, 7, 256)  # Note: None is the batch size
+    print('Gen output shape 3:', model.output_shape)
 
-    model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
-    assert model.output_shape == (None, 7, 7, 128)
+    model.add(layers.Reshape((7, 7, 3, 256)))
+
+    print('Gen output shape 4:', model.output_shape)
+
+    assert model.output_shape == (None, 7, 7, 3, 256)  # Note: None is the batch size
+
+    filters = 128
+    kernel_size = (5, 5, 5)
+    strides = (1, 1, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False))
+
+    print('Gen output shape 5:', model.output_shape)
+
+    assert model.output_shape == (None, 7, 7, 3, 128)
+
     model.add(layers.BatchNormalization())
+
+    print('Gen output shape 6:', model.output_shape)
+
     model.add(layers.LeakyReLU())
 
-    model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
-    assert model.output_shape == (None, 14, 14, 64)
+    print('Gen output shape 7:', model.output_shape)
+
+    model.add(layers.Conv3DTranspose(64, (5, 5, 5), strides=(2, 2, 2), padding='same', use_bias=False))
+
+    print('Gen output shape 8:', model.output_shape)
+
+    assert model.output_shape == (None, 14, 14, 6, 64)
+
     model.add(layers.BatchNormalization())
+
+    print('Gen output shape 9:', model.output_shape)
+
     model.add(layers.LeakyReLU())
 
-    model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False, activation='tanh'))
-    assert model.output_shape == (None, 28, 28, 1)
+    print('Gen output shape 10:', model.output_shape)
+
+    model.add(layers.Conv3DTranspose(1, (5, 5, 5), strides=(2, 2, 2), padding='same', use_bias=False, activation='tanh'))
+
+    print('Gen output shape 11:', model.output_shape)
+
+    model.add(layers.MaxPooling3D(pool_size=(1, 1, 4)))
+
+    print('Gen output shape 12:', model.output_shape)
+
+    assert model.output_shape == (None, 28, 28, 3, 1)
+
+    print('Model created.')
 
     return model
 
 
+# %%
+def convert_generated_images_to_visible_mode(generated_images):
+    images = generated_images.numpy()
+    min_value = images.min()
+    max_value = images.max()
+    diff = max_value - min_value
+    proportion = 255 / diff
+    images = images + -min_value
+    images = images * proportion
+    images = images.astype(dtype=int)
+    return images[:, :, :, :, 0]
+
+
+# %%
+
 generator = make_generator_model()
 
-noise = tf.random.normal([1, 100])
+noise = tf.random.normal([1, NOISE_DIM])
+
+
 generated_image = generator(noise, training=False)
 
-plt.imshow(generated_image[0, :, :, 0], cmap='gray')
+images = convert_generated_images_to_visible_mode(generated_image)
+plt.axis("off")
+plt.imshow(images[0])
+plt.show()
 
+
+
+
+# %%
 
 def make_discriminator_model():
     model = tf.keras.Sequential()
-    model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same',
-                                     input_shape=[28, 28, 1]))
+    model.add(layers.Conv3D(64, (5, 5, 3), strides=(2, 2, 2), padding='same', input_shape=[28, 28, 3, 1]))
     model.add(layers.LeakyReLU())
     model.add(layers.Dropout(0.3))
 
-    model.add(layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same'))
+    model.add(layers.Conv3D(128, (5, 5, 3), strides=(2, 2, 2), padding='same'))
     model.add(layers.LeakyReLU())
     model.add(layers.Dropout(0.3))
 
@@ -81,13 +174,19 @@ def make_discriminator_model():
 
     return model
 
+# %%
+
 discriminator = make_discriminator_model()
 decision = discriminator(generated_image)
 print (decision)
 
+# %%
+
 
 # This method returns a helper function to compute cross entropy loss
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+# %%
 
 def discriminator_loss(real_output, fake_output):
     real_loss = cross_entropy(tf.ones_like(real_output), real_output)
@@ -95,13 +194,19 @@ def discriminator_loss(real_output, fake_output):
     total_loss = real_loss + fake_loss
     return total_loss
 
+# %%
+
 def generator_loss(fake_output):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
+
+# %%
 
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
-checkpoint_dir = './training_checkpoints'
+# %%
+
+checkpoint_dir = './lamps_training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
@@ -109,21 +214,22 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator=discriminator)
 
 checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+# %%
 
-
-EPOCHS = 200
-noise_dim = 100
-num_examples_to_generate = 16
+EPOCHS = 1000
+num_examples_to_generate = 1
 
 # You will reuse this seed overtime (so it's easier)
 # to visualize progress in the animated GIF)
-seed = tf.random.normal([num_examples_to_generate, noise_dim])
+seed = tf.random.normal([num_examples_to_generate, NOISE_DIM])
+
+# %%
 
 # Notice the use of `tf.function`
 # This annotation causes the function to be "compiled".
 @tf.function
 def train_step(images):
-    noise = tf.random.normal([BATCH_SIZE, noise_dim])
+    noise = tf.random.normal([BATCH_SIZE, NOISE_DIM])
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
       generated_images = generator(noise, training=True)
@@ -140,6 +246,7 @@ def train_step(images):
     generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
+# %%
 
 def train(dataset, epochs):
   for epoch in range(epochs):
@@ -166,7 +273,7 @@ def train(dataset, epochs):
                            epochs,
                            seed)
 
-
+# %%
 
 
 def generate_and_save_images(model, epoch, test_input):
@@ -174,18 +281,29 @@ def generate_and_save_images(model, epoch, test_input):
   # This is so all layers run in inference mode (batchnorm).
   predictions = model(test_input, training=False)
 
-  fig = plt.figure(figsize=(4, 4))
+  #fig = plt.figure(figsize=(4, 4))
 
+  
+  images = convert_generated_images_to_visible_mode(predictions)
   for i in range(predictions.shape[0]):
-      plt.subplot(4, 4, i+1)
-      plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
-      plt.axis('off')
+    image_name = './mnist_rgb_images/image_at_epoch_{:04d}.png'.format(epoch)
+    image = images[i]
+    plt.axis("off")
+    plt.imshow(image)
+    plt.gca().set_axis_off()
+    plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0,  hspace = 0, wspace = 0)
+    plt.margins(0,0)
+    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+    plt.savefig(image_name, bbox_inches='tight', pad_inches = 0)
+    plt.show()
 
-  plt.savefig('./images/image_at_epoch_{:04d}.png'.format(epoch))
-  #plt.show()
 
+# %%
 
 train(train_dataset, EPOCHS)
+
+# %%
 
 checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
