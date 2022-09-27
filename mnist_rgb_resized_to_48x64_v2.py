@@ -321,39 +321,22 @@ train(train_dataset, EPOCHS)
 # %%
 
 checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+# %%
 
-# Display a single image using the epoch number
-def display_image(epoch_no):
-  return PIL.Image.open('image_at_epoch_{:04d}.png'.format(epoch_no))
+noise = tf.random.normal([BATCH_SIZE, NOISE_DIM])
 
+with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+  generated_images = generator(noise, training=False)
 
-display_image(EPOCHS)
-
-anim_file = 'dcgan.gif'
-
-with imageio.get_writer(anim_file, mode='I') as writer:
-  filenames = glob.glob('image*.png')
-  filenames = sorted(filenames)
-  for filename in filenames:
-    image = imageio.imread(filename)
-    writer.append_data(image)
-  image = imageio.imread(filename)
-  writer.append_data(image)
-
-
-import tensorflow_docs.vis.embed as embed
-embed.embed_file(anim_file)
-
-
-
-'''
-def main():
-    checkpoint, checkpoint_prefix = prepare_checkpoint()
-    train_dataset = load_mnist_dataset()
-    train(train_dataset, EPOCHS, checkpoint, checkpoint_prefix)
-    return train_dataset
-
-if __name__ == '__main__':
-    dataset = main()
-    print(dataset.shape)
-'''
+for i in range(0, generated_images.shape[0]):
+  image = generated_images[i]
+  image = np.reshape(image, (48, 64, 3))
+  plt.axis("off")
+  plt.imshow(image)
+  plt.gca().set_axis_off()
+  plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0,  hspace = 0, wspace = 0)
+  plt.margins(0,0)
+  plt.gca().xaxis.set_major_locator(plt.NullLocator())
+  plt.gca().yaxis.set_major_locator(plt.NullLocator())
+  plt.show(block=False)
+  
