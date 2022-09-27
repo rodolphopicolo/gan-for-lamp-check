@@ -1,3 +1,4 @@
+# %%
 # -*- coding: utf-8 -*-
 # https://www.tensorflow.org/tutorials/generative/dcgan
 
@@ -29,7 +30,7 @@ BATCH_SIZE = 256
 
 train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
 
-
+# %%
 
 
 def make_generator_model():
@@ -56,6 +57,7 @@ def make_generator_model():
 
     return model
 
+# %%
 
 generator = make_generator_model()
 
@@ -64,6 +66,7 @@ generated_image = generator(noise, training=False)
 
 plt.imshow(generated_image[0, :, :, 0], cmap='gray')
 
+# %%
 
 def make_discriminator_model():
     model = tf.keras.Sequential()
@@ -101,7 +104,7 @@ def generator_loss(fake_output):
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
-checkpoint_dir = './training_checkpoints'
+checkpoint_dir = './training_checkpoints/mnist_training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
@@ -181,7 +184,7 @@ def generate_and_save_images(model, epoch, test_input):
       plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
       plt.axis('off')
 
-  plt.savefig('./images/image_at_epoch_{:04d}.png'.format(epoch))
+  plt.savefig('./images/mnist_images/image_at_epoch_{:04d}.png'.format(epoch))
   #plt.show()
 
 

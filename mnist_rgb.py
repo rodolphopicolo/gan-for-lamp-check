@@ -25,7 +25,7 @@ from dataset_loader import load_lamps_dataset, load_mnist_dataset
 (train_images, train_labels), (_, _) = tf.keras.datasets.mnist.load_data()
 train_labels = None # to constat it is not important
 
-#train_images = train_images[:1]
+train_images = train_images[:32]
 
 
 # %%
@@ -40,10 +40,11 @@ train_images = train_images_rgb
 
 # %%
 
-plt.axis("off")
-img = ((train_images[0] * 127.5) + 127.5).astype(dtype=int)
-plt.imshow(img)
-plt.show()
+for i in range(0, len(train_images)):
+  plt.axis("off")
+  img = ((train_images[i] * 127.5) + 127.5).astype(dtype=int)
+  plt.imshow(img)
+  plt.show()
 
 
 # %%
@@ -206,7 +207,7 @@ discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
 # %%
 
-checkpoint_dir = './lamps_training_checkpoints'
+checkpoint_dir = './training_checkpoints/mnist_rgb_training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer,
@@ -286,7 +287,7 @@ def generate_and_save_images(model, epoch, test_input):
   
   images = convert_generated_images_to_visible_mode(predictions)
   for i in range(predictions.shape[0]):
-    image_name = './mnist_rgb_images/image_at_epoch_{:04d}.png'.format(epoch)
+    image_name = './images/mnist_rgb_images/image_at_epoch_{:04d}.png'.format(epoch)
     image = images[i]
     plt.axis("off")
     plt.imshow(image)
