@@ -47,8 +47,9 @@ def load_dataset_metadata(dataset_metadata_file_path):
 
 
 
-def load_lamps_dataset():
-    dataset_dir_path, dataset_metadata_file_path = load_parameters()
+def load_lamps_dataset(dataset_dir_path, dataset_metadata_file_path):
+    if dataset_dir_path == None or dataset_metadata_file_path == None:
+        dataset_dir_path, dataset_metadata_file_path = load_parameters()
 
     dataset_metadata = load_dataset_metadata(dataset_metadata_file_path)
     images = []
