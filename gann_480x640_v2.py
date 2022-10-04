@@ -12,7 +12,7 @@ import os
 from tensorflow.keras import layers
 import time
 import matplotlib.pyplot as plt
-
+import re
 
 #import cv2 as cv
 
@@ -20,9 +20,10 @@ from IPython import display
 
 from dataset_loader import load_lamps_dataset
 
-# %%
 from images_helper import generate_and_save_images
 # %%
+
+
 
 TOTAL_IMAGES_TO_LOAD = 1
 BUFFER_SIZE = TOTAL_IMAGES_TO_LOAD
@@ -30,13 +31,86 @@ BATCH_SIZE = TOTAL_IMAGES_TO_LOAD
 NOISE_DIM = 100
 EPOCHS = 5000
 num_examples_to_generate = 1
-checkpoint_dir = './training_checkpoints/lamps_480x640_training_checkpoints'
-checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-IMAGE_DIR = './images/lamps_480x640_exec_3'
 
 # %%
+#BASE_MODEL_DIR = './models'
+BASE_MODEL_DIR = '/media/rodolpho/rodolpho/models'
+MODEL_DIR_PATTERN = '^model_\d{4}_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$'
 
-def load_dataset():
+def define_model_dir(base_model_dir):
+  model_dir_validation_re = re.compile(MODEL_DIR_PATTERN)
+
+  if not os.path.exists(base_model_dir):
+    os.makedirs(base_model_dir)
+
+  model_dirs = os.listdir(base_model_dir)
+  
+  model_dirs = list(filter((lambda file: os.path.isdir), model_dirs))
+  print(model_dirs)
+
+  
+  lambda_function = (lambda model_dir: model_dir_validation_re.match(model_dir) != None)
+  dirs_filter = filter(lambda_function, model_dirs)
+  model_dirs = list(dirs_filter)
+
+
+  last_index = -1
+  if len(model_dirs) > 0:
+    model_dirs.sort()
+    last_model_dir = model_dirs[-1]
+    last_index = int(last_model_dir[6:10])
+  model_index = str((last_index +1))
+  while len(model_index) < 4:
+    model_index = '0' + model_index
+
+
+  now = time.localtime()
+  year = str(now.tm_year)
+  month = str(now.tm_mon)
+  day = str(now.tm_mday)
+  hour = str(now.tm_hour)
+  minute = str(now.tm_min)
+  second = str(now.tm_sec)
+  time_zone = str(now.tm_zone)
+
+  if len(month) < 2:
+    month = '0' + month
+
+  if len(day) < 2:
+    day = '0' + day
+  
+  if len(hour) < 2:
+    hour = '0' + hour
+
+  if len(minute) < 2:
+    minute = '0' + minute
+
+  if len(second) < 2:
+    second = '0' + second
+
+  model_dir = 'model_' + model_index + '_' + year + '-' + month + '-' + day + 'T' + hour + ':' + minute + ':' + second
+  model_dir_path = os.path.join(base_model_dir, model_dir)
+  os.makedirs(model_dir_path)
+  return model_dir_path
+
+
+model_dir = define_model_dir(BASE_MODEL_DIR)
+image_dir = os.path.join(model_dir, 'generated_images')
+checkpoint_dir = os.path.join(model_dir, 'training_checkpoints')
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+os.makedirs(image_dir)
+
+generator_file_path = os.path.join(model_dir, 'generator.tf')
+discriminator_file_path = os.path.join(model_dir, 'discriminator.tf')
+
+generator_summary_path = os.path.join(model_dir, 'generator_summary.txt')
+discriminator_summary_path = os.path.join(model_dir, 'discriminator_summary.txt')
+
+
+print('Model dir: ', model_dir, '\nImage dir: ', image_dir, '\nTraining checkpoints dir: ', checkpoint_dir, '\nCheckpoint prefix:', checkpoint_prefix)
+# %%
+
+def load_dataset(image_dir):
   images, dataset_metadata = load_lamps_dataset('../fotos_28_07', '../lamp-index.csv')
   train_images = images[:TOTAL_IMAGES_TO_LOAD]
 
@@ -51,7 +125,7 @@ def load_dataset():
   '''
 
   for i in range(train_images.shape[0]):
-    image_name = IMAGE_DIR + '/train_image_{:04d}.png'.format(i)
+    image_name = image_dir + '/train_image_{:04d}.png'.format(i)
     image = ((train_images[i] * 127.5) + 127.5).astype(dtype=np.uint8)
     #image = image.astype(dtype=np.uint8)
     plt.imsave(image_name, image)
@@ -89,6 +163,20 @@ def create_models():
   cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
   generator_optimizer = tf.keras.optimizers.Adam(1e-4)
   discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+
+  generator.save(generator_file_path, overwrite=True, include_optimizer=True, save_format='tf')
+  discriminator.save(discriminator_file_path, overwrite=True, include_optimizer=True, save_format='tf')
+
+  with open(generator_summary_path,'w') as fh:
+    generator.summary(print_fn=lambda x: fh.write(x + '\n'))
+
+  with open(discriminator_summary_path,'w') as fh:
+    discriminator.summary(print_fn=lambda x: fh.write(x + '\n'))
+
+
+
+
+
   return cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer
 
 
@@ -117,7 +205,7 @@ def train_step(images, cross_entropy, generator, generator_optimizer, discrimina
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
 # %%
-def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_checkpoint=False, generate_image=True):
+def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, image_dir, restore_last_checkpoint=False, generate_image=True):
   checkpoint = create_restore_checkpoint(restore_last_if_exists=restore_last_checkpoint)
   seed = tf.random.normal([num_examples_to_generate, NOISE_DIM])
 
@@ -128,7 +216,7 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
       train_step(image_batch, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer)
 
     if generate_image == True:
-      generate_and_save_images(generator, epoch + 1, seed, IMAGE_DIR)
+      generate_and_save_images(generator, epoch + 1, seed, image_dir)
 
     if (epoch + 1) % 50 == 0:
       display.clear_output(wait=False)
@@ -153,21 +241,10 @@ def make_generator_model():
     print('Gen output shape 4:', model.output_shape)
     assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
 
-    filters = 32
-    kernel_size = (5, 5, 3)
-    strides = (1, 1, 1)
-    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False))
-
-    print('Gen output shape 7:', model.output_shape)
-    assert model.output_shape == (None, 96, 128, 3, 32)
-
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
-    
-    filters_2 = 1
-    kernel_size_2 = (12, 16, 3)
-    strides_2 = (5, 5, 1)
-    model.add(layers.Conv3DTranspose(filters_2, kernel_size_2, strides=strides_2, padding='same', use_bias=False, activation='tanh'))
+    filters = 1
+    kernel_size = (16, 16, 1)
+    strides = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
 
     print('Gen output shape 10:', model.output_shape)
     
@@ -179,7 +256,7 @@ def make_generator_model():
 
 generator_test = make_generator_model()
 noise_test = tf.random.normal([BATCH_SIZE, NOISE_DIM])
-generate_and_save_images(generator_test, 0, noise_test, IMAGE_DIR)
+generate_and_save_images(generator_test, 0, noise_test, image_dir)
 
 # %%
 def make_discriminator_model():
@@ -200,11 +277,11 @@ def make_discriminator_model():
 
 
 # %%
-train_dataset = load_dataset()
+train_dataset = load_dataset(image_dir)
 
 # %%
 cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models()
 
 # %%
 EPOCHS = 5000
-train(train_dataset, EPOCHS, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_checkpoint=True, generate_image=True)
+train(train_dataset, EPOCHS, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, image_dir, restore_last_checkpoint=True, generate_image=True)
