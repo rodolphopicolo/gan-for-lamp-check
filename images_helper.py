@@ -2,6 +2,7 @@ import os
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+import shutil
 
 def calculate_next_image_name(epoch, prediction, image_dir, image_name_prefix):
   execution = 0
@@ -85,6 +86,22 @@ def generated_images_list(image_dir, image_name_prefix):
   
   return images
 
+def keep_just_images_from_epochs_multiples_of(image_dir, image_name_prefix, multiple, destination_dir):
+    images = generated_images_list(image_dir, image_name_prefix)
+    for image_name in images:
+      epoch = int(image_name[len(image_name_prefix): len(image_name_prefix) + 4])
+
+      if epoch % multiple != 0:
+        print('REMOVE', image_name, epoch)
+        source_absolute_path = os.path.join(image_dir, image_name)
+        destination_absolute_path = os.path.join(destination_dir, image_name)
+        shutil.move(source_absolute_path, destination_absolute_path)
+      else:
+        print('KEEP', image_name, epoch)
+
+      
+
+
 
 def check_previous_epochs(image_dir, image_name_prefix):
   images = generated_images_list(image_dir, image_name_prefix)
@@ -103,3 +120,6 @@ def check_previous_epochs(image_dir, image_name_prefix):
 if __name__ == '__main__':
   last_epoch = check_previous_epochs('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images', 'image_at_epoch_')
   print(last_epoch)
+
+  destination_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/not_multiple_images'
+  keep_just_images_from_epochs_multiples_of('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images', 'image_at_epoch_', 10, destination_dir)
