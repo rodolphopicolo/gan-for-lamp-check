@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -59,3 +60,46 @@ def generate_and_save_images(model, epoch, test_input, image_dir, image_name_pre
     #plt.show(block=False)
     plt.imsave(image_name, image)
     
+def generated_images_list(image_dir, image_name_prefix):
+  image_name_pattern = image_name_prefix + '\d{4}' + '_pred_' + '\d{4}' + '_exec_' + '\d{4}' + '.png'
+
+  image_name_validation_re = re.compile(image_name_pattern)
+
+  images = os.listdir(image_dir)
+
+  if len(images) == 0:
+    return []
+
+  images = list(filter((lambda file: os.path.isfile), images))
+
+  if len(images) == 0:
+    return []
+
+  lambda_function = (lambda model_dir: image_name_validation_re.match(model_dir) != None)
+  images = list(filter(lambda_function, images))
+
+  if len(images) == 0:
+    return []
+
+  images.sort()
+  
+  return images
+
+
+def check_previous_epochs(image_dir, image_name_prefix):
+  images = generated_images_list(image_dir, image_name_prefix)
+  if len(images) == 0:
+    return 0
+
+  last_image_name = images[-1]
+
+  last_epoch = last_image_name[len(image_name_prefix): len(image_name_prefix) + 4]
+  last_epoch = int(last_epoch)
+  print('Generated image for last epoch:', last_image_name, 'Epoch:', last_epoch)
+
+  return last_epoch
+
+
+if __name__ == '__main__':
+  last_epoch = check_previous_epochs('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images', 'image_at_epoch_')
+  print(last_epoch)

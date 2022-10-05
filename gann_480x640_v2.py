@@ -20,14 +20,13 @@ from IPython import display
 
 from dataset_loader import load_lamps_dataset
 
-from images_helper import generate_and_save_images
+from images_helper import generate_and_save_images, check_previous_epochs
 
 QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT = 500
 TOTAL_IMAGES_TO_LOAD = 1
 BUFFER_SIZE = TOTAL_IMAGES_TO_LOAD
 BATCH_SIZE = TOTAL_IMAGES_TO_LOAD
 NOISE_DIM = 100
-EPOCHS = 5000
 num_examples_to_generate = 1
 IMAGE_NAME_PREFIX = 'image_at_epoch_'
 NOISE_IMAGE_PREFIX = 'generator_test_'
@@ -41,6 +40,8 @@ DISCRIMINATOR_FILE_PATH = 'discriminator_file_path'
 GENERATOR_SUMMARY_PATH = 'generator_summary_path'
 DISCRIMINATOR_SUMMARY_PATH = 'discriminator_summary_path'
 MODEL_VERSION_FILE_PATH = 'model_version_file_path'
+
+EPOCH_STEP_TO_GENERATE_IMAGE = 10
 
 
 #BASE_MODEL_DIR = './models'
@@ -104,9 +105,12 @@ def define_model_dir(base_model_dir):
 
 
 
-def define_paths(model_dir):
-  if model_dir == None:
+def define_paths(previous_generated_model_dir=None):
+  if previous_generated_model_dir == None:
     model_dir = define_model_dir(BASE_MODEL_DIR)
+  else:
+    model_dir = previous_generated_model_dir
+
   image_dir = os.path.join(model_dir, 'generated_images')
   checkpoint_dir = os.path.join(model_dir, 'training_checkpoints')
   checkpoint_prefix = 'ckpt'
@@ -170,7 +174,7 @@ def generator_loss(fake_output, cross_entropy):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
 
-def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, restore_last_if_exists=True):
+def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_if_exists=True):
   checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                   discriminator_optimizer=discriminator_optimizer,
                                   generator=generator,
@@ -187,7 +191,89 @@ def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, restore
   return manager;
 
 
+
+def check_model_version_file_line(line, model_version, valid_model_versions, model_type):
+
+  if model_version == None:
+    raise Exception('Model version not specified')
+
+  previous_version = None
+  line = line.upper().strip()
+  if len(line) > len(model_type):
+    if line[0: len(model_type)] == model_type.upper():
+      splitted = line.split(':')
+      if len(splitted) != 2:
+        raise Exception('Invalid model version file: invalid ' + model_type.lower() + ' version, colon (":") appears more than once')
+      right_side = splitted[1].strip()
+      if right_side.isnumeric() == False:
+        raise Exception('Invalid model version file: invalid ' + model_type.lower() + ' version, version is not a number')
+      previous_version = int(right_side)
+      if previous_version not in valid_model_versions:
+        raise Exception('Invalid model version file: version ' + str(previous_version) + ' is not valid, valid values are ' + str(valid_model_versions))
+
+  if previous_version != None:
+    if previous_version != model_version:
+      raise Exception('Invalid model version: the right version for ' + model_type.lower() + ' is ' + str(previous_version))
+
+  return previous_version
+
+
+def check_models_version(paths, generator_version, discriminator_version):
+
+  if generator_version == None:
+    raise Exception('Generator version not specified')
+
+  if discriminator_version == None:
+    raise Exception('Discriminator version not specified')
+
+  if generator_version not in GENERATOR_VERSIONS:
+    raise Exception('Invalid generator_model version ', generator_version)
+
+  if discriminator_version not in DISCRIMINATOR_VERSIONS:
+    raise Exception('Invalid discriminator_model version ', discriminator_version)
+
+  model_version_file_path = paths[MODEL_VERSION_FILE_PATH]
+  if os.path.exists(model_version_file_path) == False:
+    return
+
+  with open(model_version_file_path,'r') as f:
+    lines = f.readlines()
+
+  previous_generator_version = None
+  previous_discriminator_version = None
+
+  for line in lines:
+    line_version = check_model_version_file_line(line, generator_version, GENERATOR_VERSIONS, 'generator')
+    if line_version != None:
+      if previous_generator_version != None:
+        raise Exception('Invalid model version file: generator version appears more than once')
+      else:
+        previous_generator_version = line_version
+
+    line_version = check_model_version_file_line(line, discriminator_version, DISCRIMINATOR_VERSIONS, 'discriminator')
+    if line_version != None:
+      if previous_discriminator_version != None:
+        raise Exception('Invalid model version file: discriminator version appears more than once')
+      else:
+        previous_discriminator_version = line_version
+
+
+
+def save_model_version(paths, generator_version, discriminator_version):
+  model_version_file_path = paths[MODEL_VERSION_FILE_PATH]
+
+  if os.path.exists(model_version_file_path):
+    check_models_version(paths, generator_version, discriminator_version)
+    return
+
+  with open(model_version_file_path,'w') as fh:
+    fh.write('Generator version: ' + str(generator_version))
+    fh.write('\nDiscriminator version: ' + str(discriminator_version))
+
+
 def create_models(paths, generator_version, discriminator_version):
+
+  save_model_version(paths, generator_version, discriminator_version)
 
   generator = make_generator_model(generator_version)
   discriminator = make_discriminator_model(discriminator_version)
@@ -210,12 +296,6 @@ def create_models(paths, generator_version, discriminator_version):
 
   noise_test = tf.random.normal([BATCH_SIZE, NOISE_DIM])
   generate_and_save_images(generator, 0, noise_test, paths[IMAGE_DIR], NOISE_IMAGE_PREFIX)
-
-  with open(paths[MODEL_VERSION_FILE_PATH],'w') as fh:
-    fh.write('Generator version: ' + str(generator_version))
-    fh.write('\nDiscriminator version: ' + str(discriminator_version))
-  
-
 
   return cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer
 
@@ -252,7 +332,7 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
   image_dir = paths[IMAGE_DIR]
 
 
-  checkpoint_manager = create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, restore_last_if_exists=restore_last_checkpoint)
+  checkpoint_manager = create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_if_exists=restore_last_checkpoint)
   seed = tf.random.normal([num_examples_to_generate, NOISE_DIM])
 
   for epoch in range(epochs):
@@ -261,7 +341,7 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
     for image_batch in dataset:
       train_step(image_batch, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer)
 
-    if generate_image == True:
+    if generate_image == True and ((epoch + 1 + previous_calculated_epoch) % EPOCH_STEP_TO_GENERATE_IMAGE == 0):
       generate_and_save_images(generator, epoch + 1 + previous_calculated_epoch, seed, image_dir, IMAGE_NAME_PREFIX)
 
     if (epoch + 1) % 50 == 0:
@@ -272,11 +352,14 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
 
     print ('Time for epoch {} is {} sec'.format(epoch + 1 + previous_calculated_epoch, time.time()-start))
 
+
 def make_generator_model(version):
   if version == 1:
     return generator_model_v1()
   elif version == 2:
     return generator_model_v2()
+
+GENERATOR_VERSIONS = {1, 2}
 
 def generator_model_v1():
     model = tf.keras.Sequential()
@@ -343,6 +426,14 @@ def generator_model_v2():
 
 
 def make_discriminator_model(discriminator_version):
+  if discriminator_version == 1:
+    return discriminator_model_v1()
+  elif discriminator_version == 2:
+    return discriminator_model_v2()
+
+DISCRIMINATOR_VERSIONS = {1, 2}
+
+def discriminator_model_v1():
     model = tf.keras.Sequential()
     model.add(layers.Conv3D(64, (48, 64, 1), strides=(12, 16, 1), padding='same', input_shape=[480, 640, 3, 1]))
     model.add(layers.LeakyReLU())
@@ -357,16 +448,45 @@ def make_discriminator_model(discriminator_version):
 
     return model
 
+def discriminator_model_v2():
+    model = tf.keras.Sequential()
+    model.add(layers.Conv3D(64, (48, 48, 1), strides=(8, 8, 3), padding='same', input_shape=[480, 640, 3, 1]))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
 
+    model.add(layers.Conv3D(128, (48, 48, 1), strides=(8, 8, 3), padding='same'))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
 
-#paths = define_paths('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55')
-paths = define_paths(None)
+    model.add(layers.Flatten())
+    model.add(layers.Dense(1))
 
-train_dataset = load_dataset(paths[IMAGE_DIR])
-
-generator_version = 1
-discriminator_version = 1
-cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version)
+    return model
 # %%
-EPOCHS = 100000
-train(train_dataset, EPOCHS, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0)
+
+
+def run(generator_version=1, discriminator_version=1, previous_generated_model_dir = None):
+  paths = define_paths(previous_generated_model_dir)
+
+  check_models_version(paths, generator_version, discriminator_version)
+
+  previous_calculated_epoch = 0
+  if previous_generated_model_dir != None:
+    previous_calculated_epoch = check_previous_epochs(paths[IMAGE_DIR], 'image_at_epoch_')
+
+  epochs = 100000
+
+  train_dataset = load_dataset(paths[IMAGE_DIR])
+  cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version)
+  train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch)
+
+
+def main():
+  generator_version=2
+  discriminator_version=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55'
+  
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, previous_generated_model_dir=previous_generated_model_dir)
+
+main()
