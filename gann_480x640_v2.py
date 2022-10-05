@@ -40,6 +40,7 @@ GENERATOR_FILE_PATH = 'generator_file_path'
 DISCRIMINATOR_FILE_PATH = 'discriminator_file_path'
 GENERATOR_SUMMARY_PATH = 'generator_summary_path'
 DISCRIMINATOR_SUMMARY_PATH = 'discriminator_summary_path'
+MODEL_VERSION_FILE_PATH = 'model_version_file_path'
 
 
 #BASE_MODEL_DIR = './models'
@@ -117,6 +118,8 @@ def define_paths(model_dir):
   generator_summary_path = os.path.join(model_dir, 'generator_summary.txt')
   discriminator_summary_path = os.path.join(model_dir, 'discriminator_summary.txt')
 
+  model_version_file_path = os.path.join(model_dir, 'models_version.txt')
+
   paths = {
     MODEL_DIR: model_dir,
     IMAGE_DIR: image_dir,
@@ -126,6 +129,7 @@ def define_paths(model_dir):
     DISCRIMINATOR_FILE_PATH: discriminator_file_path,
     GENERATOR_SUMMARY_PATH: generator_summary_path,
     DISCRIMINATOR_SUMMARY_PATH: discriminator_summary_path,
+    MODEL_VERSION_FILE_PATH: model_version_file_path,
   }
 
   return paths
@@ -183,9 +187,10 @@ def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, restore
   return manager;
 
 
-def create_models(paths):
-  generator = make_generator_model()
-  discriminator = make_discriminator_model()
+def create_models(paths, generator_version, discriminator_version):
+
+  generator = make_generator_model(generator_version)
+  discriminator = make_discriminator_model(discriminator_version)
   cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
   generator_optimizer = tf.keras.optimizers.Adam(1e-4)
   discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
@@ -205,6 +210,11 @@ def create_models(paths):
 
   noise_test = tf.random.normal([BATCH_SIZE, NOISE_DIM])
   generate_and_save_images(generator, 0, noise_test, paths[IMAGE_DIR], NOISE_IMAGE_PREFIX)
+
+  with open(paths[MODEL_VERSION_FILE_PATH],'w') as fh:
+    fh.write('Generator version: ' + str(generator_version))
+    fh.write('\nDiscriminator version: ' + str(discriminator_version))
+  
 
 
   return cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer
@@ -262,9 +272,50 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
 
     print ('Time for epoch {} is {} sec'.format(epoch + 1 + previous_calculated_epoch, time.time()-start))
 
+def make_generator_model(version):
+  if version == 1:
+    return generator_model_v1()
+  elif version == 2:
+    return generator_model_v2()
 
+def generator_model_v1():
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(96*128*3*64, use_bias=False, input_shape=(NOISE_DIM,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
 
-def make_generator_model():
+    print('Gen output shape 3:', model.output_shape)
+
+    model.add(layers.Reshape((96, 128, 3, 64)))
+
+    print('Gen output shape 4:', model.output_shape)
+    assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
+
+    filters = 32
+    kernel_size = (5, 5, 3)
+    strides = (1, 1, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False))
+
+    print('Gen output shape 7:', model.output_shape)
+    assert model.output_shape == (None, 96, 128, 3, 32)
+
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    
+    filters_2 = 1
+    kernel_size_2 = (12, 16, 3)
+    strides_2 = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters_2, kernel_size_2, strides=strides_2, padding='same', use_bias=False, activation='tanh'))
+
+    print('Gen output shape 10:', model.output_shape)
+    
+    assert model.output_shape == (None, 480, 640, 3, 1)
+
+    print('Model created.')
+
+    return model
+
+def generator_model_v2():
     model = tf.keras.Sequential()
     model.add(layers.Dense(96*128*3*64, use_bias=False, input_shape=(NOISE_DIM,)))
     model.add(layers.BatchNormalization())
@@ -291,7 +342,7 @@ def make_generator_model():
     return model
 
 
-def make_discriminator_model():
+def make_discriminator_model(discriminator_version):
     model = tf.keras.Sequential()
     model.add(layers.Conv3D(64, (48, 64, 1), strides=(12, 16, 1), padding='same', input_shape=[480, 640, 3, 1]))
     model.add(layers.LeakyReLU())
@@ -308,11 +359,14 @@ def make_discriminator_model():
 
 
 
-paths = define_paths('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55')
+#paths = define_paths('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55')
+paths = define_paths(None)
 
 train_dataset = load_dataset(paths[IMAGE_DIR])
 
-cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths)
+generator_version = 1
+discriminator_version = 1
+cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version)
 # %%
 EPOCHS = 100000
-train(train_dataset, EPOCHS, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=1400)
+train(train_dataset, EPOCHS, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0)
