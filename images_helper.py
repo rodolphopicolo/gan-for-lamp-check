@@ -2,11 +2,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-def calculate_next_image_name(epoch, prediction, image_dir):
-  IMAGE_NAME_PREFIX = 'image_at_epoch_'
+def calculate_next_image_name(epoch, prediction, image_dir, image_name_prefix):
   execution = 0
   while True:
-    image_name = image_dir + '/' + IMAGE_NAME_PREFIX + '{:04d}_pred_{:04d}_exec_{:04d}.png'.format(epoch, prediction, execution)
+    image_name = image_dir + '/' + image_name_prefix + '{:04d}_pred_{:04d}_exec_{:04d}.png'.format(epoch, prediction, execution)
     if not os.path.exists(image_name):
       return image_name
     execution += 1
@@ -34,7 +33,7 @@ def convert_generated_images_to_visible_mode(generated_images):
     return images[:, :, :, :, 0]
 
 
-def generate_and_save_images(model, epoch, test_input, image_dir):
+def generate_and_save_images(model, epoch, test_input, image_dir, image_name_prefix):
   # Notice `training` is set to False.
   # This is so all layers run in inference mode (batchnorm).
   predictions = model(test_input, training=False)
@@ -45,7 +44,7 @@ def generate_and_save_images(model, epoch, test_input, image_dir):
   images = convert_generated_images_to_visible_mode(predictions)
   for i in range(predictions.shape[0]):
     
-    image_name = calculate_next_image_name(epoch, i, image_dir)
+    image_name = calculate_next_image_name(epoch, i, image_dir, image_name_prefix)
 
     image = images[i]
     image = image.astype(dtype=np.uint8)
