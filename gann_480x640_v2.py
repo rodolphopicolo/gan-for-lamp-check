@@ -39,7 +39,8 @@ GENERATOR_SUMMARY_PATH = 'generator_summary_path'
 DISCRIMINATOR_SUMMARY_PATH = 'discriminator_summary_path'
 MODEL_VERSION_FILE_PATH = 'model_version_file_path'
 
-EPOCH_STEP_TO_GENERATE_IMAGE = 10
+#EPOCH_STEP_TO_GENERATE_IMAGE = 10
+EPOCH_STEP_TO_GENERATE_IMAGE = [1, 5, 10, 100]
 
 
 #BASE_MODEL_DIR = './models'
@@ -339,7 +340,9 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
     for image_batch in dataset:
       train_step(image_batch, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer)
 
-    if generate_image == True and ((epoch + 1 + previous_calculated_epoch) % EPOCH_STEP_TO_GENERATE_IMAGE == 0):
+    
+    #if generate_image == True and ((epoch + 1 + previous_calculated_epoch) % EPOCH_STEP_TO_GENERATE_IMAGE == 0):
+    if generate_image == True and epoch_generate_image(epoch):
       generate_and_save_images(generator, epoch + 1 + previous_calculated_epoch, seed, image_dir, IMAGE_NAME_PREFIX)
 
     if (epoch + 1) % 50 == 0:
@@ -541,6 +544,23 @@ def run_config_2():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 # %%
 
+def epoch_generate_image(epoch):
+  cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
+  for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
+    if EPOCH_STEP_TO_GENERATE_IMAGE[i] > epoch:
+      cursor = i - 1
+      break
+
+  if cursor < 0:
+    return True
+
+  multiple = EPOCH_STEP_TO_GENERATE_IMAGE[cursor]
+
+  if epoch % multiple == 0:
+    return True
+
+  return False
+
 def check_config():
   arg_id = '--config='
   for i in range(len(sys.argv)):
@@ -570,10 +590,10 @@ def main():
     return
 
   if config == 1:
-    print('running config 1')
+    print('Running config 1')
     run_config_1()
   elif config ==2:
-    print('running config 2')
+    print('Running config 2')
     run_config_2()
   else:
     raise Exception('Unsupported config ' + str(config))
@@ -581,4 +601,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-# %%
