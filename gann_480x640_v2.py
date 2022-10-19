@@ -2,25 +2,23 @@
 # https://www.tensorflow.org/tutorials/generative/dcgan
 
 # %%
-import tensorflow as tf
-#import imageio
-#import glob
-#import glog
-import numpy as np
 import os
-#import PIL
-from tensorflow.keras import layers
+import sys
 import time
-import matplotlib.pyplot as plt
 import re
 
-#import cv2 as cv
+import numpy as np
+import matplotlib.pyplot as plt
+
+import tensorflow as tf
+from tensorflow.keras import layers
 
 from IPython import display
 
 from dataset_loader import load_lamps_dataset
-
 from images_helper import generate_and_save_images, check_previous_epochs
+
+
 
 QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT = 500
 TOTAL_IMAGES_TO_LOAD = 1
@@ -174,7 +172,7 @@ def generator_loss(fake_output, cross_entropy):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
 
-def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_if_exists=True):
+def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, max_checkpoint_to_keep=2, restore_last_if_exists=True):
   checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                   discriminator_optimizer=discriminator_optimizer,
                                   generator=generator,
@@ -183,7 +181,7 @@ def create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generat
   manager = tf.train.CheckpointManager(checkpoint
                                       , directory=checkpoint_dir
                                       , checkpoint_name=checkpoint_prefix
-                                      , max_to_keep=2)
+                                      , max_to_keep=max_checkpoint_to_keep)
 
   if restore_last_if_exists == True:
     checkpoint.restore(manager.latest_checkpoint)
@@ -325,14 +323,14 @@ def train_step(images, cross_entropy, generator, generator_optimizer, discrimina
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
 
-def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0):
+def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0, max_checkpoint_to_keep=2):
 
   checkpoint_dir = paths[CHECKPOINT_DIR]
   checkpoint_prefix = paths[CHECKPOINT_PREFIX]
   image_dir = paths[IMAGE_DIR]
 
 
-  checkpoint_manager = create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, restore_last_if_exists=restore_last_checkpoint)
+  checkpoint_manager = create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, max_checkpoint_to_keep, restore_last_if_exists=restore_last_checkpoint)
   seed = tf.random.normal([num_examples_to_generate, NOISE_DIM])
 
   for epoch in range(epochs):
@@ -358,8 +356,10 @@ def make_generator_model(version):
     return generator_model_v1()
   elif version == 2:
     return generator_model_v2()
+  elif version == 3:
+    return generator_model_v3()
 
-GENERATOR_VERSIONS = {1, 2}
+GENERATOR_VERSIONS = {1, 2, 3}
 
 def generator_model_v1():
     model = tf.keras.Sequential()
@@ -424,14 +424,44 @@ def generator_model_v2():
 
     return model
 
+def generator_model_v3():
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(96*128*3*64, use_bias=False, input_shape=(NOISE_DIM,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    print('Gen output shape 3:', model.output_shape)
+
+    model.add(layers.Reshape((96, 128, 3, 64)))
+
+    print('Gen output shape 4:', model.output_shape)
+    assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
+
+    filters = 1
+    kernel_size = (16, 16, 1)
+    strides = (10, 10, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
+
+    model.add(layers.MaxPooling3D(pool_size=(2, 2, 1)))
+
+    print('Gen output shape 10:', model.output_shape)
+    
+    assert model.output_shape == (None, 480, 640, 3, 1)
+
+    print('Model created.')
+
+    return model
+
 
 def make_discriminator_model(discriminator_version):
   if discriminator_version == 1:
     return discriminator_model_v1()
   elif discriminator_version == 2:
     return discriminator_model_v2()
+  elif discriminator_version == 3:
+    return discriminator_model_v3()
 
-DISCRIMINATOR_VERSIONS = {1, 2}
+DISCRIMINATOR_VERSIONS = {1, 2, 3}
 
 def discriminator_model_v1():
     model = tf.keras.Sequential()
@@ -462,10 +492,24 @@ def discriminator_model_v2():
     model.add(layers.Dense(1))
 
     return model
-# %%
+
+def discriminator_model_v3():
+    model = tf.keras.Sequential()
+    model.add(layers.Conv3D(64, (12, 12, 1), strides=(4, 4, 1), padding='same', input_shape=[480, 640, 3, 1]))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv3D(128, (12, 12, 1), strides=(4, 4, 1), padding='same'))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Flatten())
+    model.add(layers.Dense(1))
+
+    return model
 
 
-def run(generator_version=1, discriminator_version=1, previous_generated_model_dir = None):
+def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None):
   paths = define_paths(previous_generated_model_dir)
 
   check_models_version(paths, generator_version, discriminator_version)
@@ -474,19 +518,67 @@ def run(generator_version=1, discriminator_version=1, previous_generated_model_d
   if previous_generated_model_dir != None:
     previous_calculated_epoch = check_previous_epochs(paths[IMAGE_DIR], 'image_at_epoch_')
 
-  epochs = 100000
+  
 
   train_dataset = load_dataset(paths[IMAGE_DIR])
   cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version)
-  train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch)
+  train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep)
 
-
-def main():
+def run_config_1():
+  epochs=10000
   generator_version=2
   discriminator_version=1
+  max_checkpoint_to_keep=1
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55'
-  
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
-  run(generator_version=generator_version, discriminator_version=discriminator_version, previous_generated_model_dir=previous_generated_model_dir)
+def run_config_2():
+  epochs=10000
+  generator_version=2
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-08T07:43:29'
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
+# %%
 
-main()
+def check_config():
+  arg_id = '--config='
+  for i in range(len(sys.argv)):
+    arg = sys.argv[i]
+    if len(arg) > len(arg_id):
+      if arg[:len(arg_id)] == arg_id:
+        config = arg[len(arg_id):]
+        if config.isnumeric == False:
+          print('Invalid config: specify a number between 1 and 2')
+          return -2
+
+        config = int(config)
+
+        if config < 1 or config > 2:
+          print('Invalid config: specify a number between 1 and 2')
+          return -3
+
+        print('Config: ', config)
+        return config
+
+  print('Invalid not specified')
+  return -1
+
+def main():
+  config = check_config()
+  if config <= 0:
+    return
+
+  if config == 1:
+    print('running config 1')
+    run_config_1()
+  elif config ==2:
+    print('running config 2')
+    run_config_2()
+  else:
+    raise Exception('Unsupported config ' + str(config))
+
+
+if __name__ == '__main__':
+  main()
+# %%

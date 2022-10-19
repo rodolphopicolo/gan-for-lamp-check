@@ -175,6 +175,7 @@ def create_epochs_animation(image_dir, image_name_prefix, epoch_multiple_of):
 
 
 
+
 if __name__ == '__main__':
 
   image_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images'
@@ -189,5 +190,3 @@ if __name__ == '__main__':
   #keep_just_images_from_epochs_multiples_of('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images', 'image_at_epoch_', 10, destination_dir)
 
   create_epochs_animation('/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55/generated_images', 'image_at_epoch_', 100)
-
-  
