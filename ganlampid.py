@@ -592,6 +592,15 @@ def run_config_3():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
 
+def run_config_4():
+  epochs=1000000
+  generator_version=4
+  discriminator_version=1
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0004_2022-10-22T10:00:000'
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
+
+
 def epoch_generate_image(epoch):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
   for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
@@ -617,13 +626,13 @@ def check_config():
       if arg[:len(arg_id)] == arg_id:
         config = arg[len(arg_id):]
         if config.isnumeric == False:
-          print('Invalid config: specify a number between 1 and 2')
+          print('Invalid config: specify a number between 1 and 4')
           return -2
 
         config = int(config)
 
-        if config < 1 or config > 3:
-          print('Invalid config: specify a number between 1 and 2')
+        if config < 1 or config > 4:
+          print('Invalid config: specify a number between 1 and 4')
           return -3
 
         print('Config: ', config)
@@ -646,6 +655,9 @@ def main():
   elif config ==3:
     print('Running config 3')
     run_config_3()
+  elif config ==4:
+    print('Running config 4')
+    run_config_4()
   else:
     raise Exception('Unsupported config ' + str(config))
 
