@@ -361,8 +361,10 @@ def make_generator_model(version):
     return generator_model_v2()
   elif version == 3:
     return generator_model_v3()
+  elif version == 4:
+    return generator_model_v4()
 
-GENERATOR_VERSIONS = {1, 2, 3}
+GENERATOR_VERSIONS = {1, 2, 3, 4}
 
 def generator_model_v1():
     model = tf.keras.Sequential()
@@ -455,6 +457,44 @@ def generator_model_v3():
 
     return model
 
+# %%
+def generator_model_v4():
+
+    batch_size = 1
+    
+
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(96*128*3*batch_size, use_bias=False, input_shape=(NOISE_DIM,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    print('Shape state 1:', model.output_shape)
+
+    model.add(layers.Reshape((96, 128, 3, batch_size)))
+
+    print('Shape state 2:', model.output_shape)
+    assert model.output_shape == (None, 96, 128, 3, batch_size)  # Note: None is the batch size
+
+
+    model.add(layers.Conv3D(64, (16, 16, 1), strides=(1, 1, 1), padding='same', input_shape=[96, 128, 3, batch_size]))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    print('Shape state 3:', model.output_shape)
+
+    filters = 1
+    kernel_size = (16, 16, 1)
+    strides = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
+
+    print('Shape state 4:', model.output_shape)
+    
+    assert model.output_shape == (None, 480, 640, 3, 1)
+
+    print('Model created.')
+
+    return model
+# %%
 
 def make_discriminator_model(discriminator_version):
   if discriminator_version == 1:
@@ -528,21 +568,29 @@ def run(generator_version=1, discriminator_version=1, epochs = 100000, max_check
   train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep)
 
 def run_config_1():
-  epochs=10000
+  epochs=1000000
   generator_version=2
   discriminator_version=1
   max_checkpoint_to_keep=1
-  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-04T14:55:55'
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0001_2022-10-04T14:55:55'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
 def run_config_2():
-  epochs=10000
+  epochs=1000000
   generator_version=2
   discriminator_version=3
   max_checkpoint_to_keep=1
-  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/model_0000_2022-10-08T07:43:29'
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0002_2022-10-08T07:43:29'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
-# %%
+
+def run_config_3():
+  epochs=1000000
+  generator_version=4
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0003_2022-10-22T07:00:000'
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
+
 
 def epoch_generate_image(epoch):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
@@ -574,14 +622,14 @@ def check_config():
 
         config = int(config)
 
-        if config < 1 or config > 2:
+        if config < 1 or config > 3:
           print('Invalid config: specify a number between 1 and 2')
           return -3
 
         print('Config: ', config)
         return config
 
-  print('Invalid not specified')
+  print('Config not specified')
   return -1
 
 def main():
@@ -595,8 +643,13 @@ def main():
   elif config ==2:
     print('Running config 2')
     run_config_2()
+  elif config ==3:
+    print('Running config 3')
+    run_config_3()
   else:
     raise Exception('Unsupported config ' + str(config))
+
+# %%
 
 
 if __name__ == '__main__':
