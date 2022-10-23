@@ -363,8 +363,12 @@ def make_generator_model(version):
     return generator_model_v3()
   elif version == 4:
     return generator_model_v4()
+  elif version == 5:
+    return generator_model_v5()
+  else:
+    raise Exception('Unsupported generator version')
 
-GENERATOR_VERSIONS = {1, 2, 3, 4}
+GENERATOR_VERSIONS = {1, 2, 3, 4, 5}
 
 def generator_model_v1():
     model = tf.keras.Sequential()
@@ -457,7 +461,7 @@ def generator_model_v3():
 
     return model
 
-# %%
+
 def generator_model_v4():
 
     batch_size = 1
@@ -494,7 +498,43 @@ def generator_model_v4():
     print('Model created.')
 
     return model
-# %%
+
+
+def generator_model_v5():
+
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(96*128*3*64, use_bias=False, input_shape=(NOISE_DIM,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    print('Shape state 1:', model.output_shape)
+
+    model.add(layers.Reshape((96, 128, 3, 64)))
+
+    print('Shape state 2:', model.output_shape)
+    assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
+
+
+    model.add(layers.Conv3D(64, (16, 16, 1), strides=(1, 1, 1), padding='same', input_shape=[96, 128, 3, 64]))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    print('Shape state 3:', model.output_shape)
+
+    filters = 1
+    kernel_size = (16, 16, 1)
+    strides = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
+
+    print('Shape state 4:', model.output_shape)
+    
+    assert model.output_shape == (None, 480, 640, 3, 1)
+
+    print('Model created.')
+
+    return model
+
+
 
 def make_discriminator_model(discriminator_version):
   if discriminator_version == 1:
@@ -601,6 +641,16 @@ def run_config_4():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
 
+def run_config_5():
+  epochs=1000000
+  generator_version=5
+  discriminator_version=1
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0005_2022-10-23T08:00:000'
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
+
+
+
 def epoch_generate_image(epoch):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
   for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
@@ -631,7 +681,7 @@ def check_config():
 
         config = int(config)
 
-        if config < 1 or config > 4:
+        if config < 1 or config > 5:
           print('Invalid config: specify a number between 1 and 4')
           return -3
 
@@ -658,6 +708,9 @@ def main():
   elif config ==4:
     print('Running config 4')
     run_config_4()
+  elif config ==5:
+    print('Running config 5')
+    run_config_5()
   else:
     raise Exception('Unsupported config ' + str(config))
 
