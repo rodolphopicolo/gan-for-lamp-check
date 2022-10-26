@@ -270,15 +270,15 @@ def save_model_version(paths, generator_version, discriminator_version):
     fh.write('\nDiscriminator version: ' + str(discriminator_version))
 
 
-def create_models(paths, generator_version, discriminator_version):
+def create_models(paths, generator_version, discriminator_version, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4):
 
   save_model_version(paths, generator_version, discriminator_version)
 
   generator = make_generator_model(generator_version)
   discriminator = make_discriminator_model(discriminator_version)
   cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-  generator_optimizer = tf.keras.optimizers.Adam(1e-4)
-  discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+  generator_optimizer = tf.keras.optimizers.Adam(generator_optimizer_learning_rate)
+  discriminator_optimizer = tf.keras.optimizers.Adam(discriminator_optimizer_learning_rate)
 
   if os.path.exists(paths[GENERATOR_FILE_PATH])==False:
     generator.save(paths[GENERATOR_FILE_PATH], overwrite=False, include_optimizer=True, save_format='tf')
@@ -592,7 +592,7 @@ def discriminator_model_v3():
     return model
 
 
-def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None):
+def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4):
   paths = define_paths(previous_generated_model_dir)
 
   check_models_version(paths, generator_version, discriminator_version)
@@ -604,7 +604,7 @@ def run(generator_version=1, discriminator_version=1, epochs = 100000, max_check
   
 
   train_dataset = load_dataset(paths[IMAGE_DIR])
-  cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version)
+  cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version, generator_optimizer_learning_rate, discriminator_optimizer_learning_rate)
   train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep)
 
 def run_config_1():
@@ -649,6 +649,29 @@ def run_config_5():
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0005_2022-10-23T08:00:000'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
+def run_config_6():
+  epochs=1000000
+  generator_version=2
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0006_2022-10-25T17:00:00'
+
+  generator_optimizer_learning_rate=1e-3
+  discriminator_optimizer_learning_rate=1e-3
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
+
+def run_config_7():
+  epochs=1000000
+  generator_version=2
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0007_2022-10-26T04:00:00'
+
+  generator_optimizer_learning_rate=1e-2
+  discriminator_optimizer_learning_rate=1e-2
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
 def epoch_generate_image(epoch):
@@ -669,6 +692,10 @@ def epoch_generate_image(epoch):
   return False
 
 def check_config():
+
+  min_config = 1
+  max_config = 7
+
   arg_id = '--config='
   for i in range(len(sys.argv)):
     arg = sys.argv[i]
@@ -676,13 +703,13 @@ def check_config():
       if arg[:len(arg_id)] == arg_id:
         config = arg[len(arg_id):]
         if config.isnumeric == False:
-          print('Invalid config: specify a number between 1 and 4')
+          print('Invalid config: specify a number between ' + str(min_config) + ' and ' + str(max_config))
           return -2
 
         config = int(config)
 
-        if config < 1 or config > 5:
-          print('Invalid config: specify a number between 1 and 4')
+        if config < min_config or config > max_config:
+          print('Invalid config: specify a number between ' + str(min_config) + ' and ' + str(max_config))
           return -3
 
         print('Config: ', config)
@@ -711,6 +738,12 @@ def main():
   elif config ==5:
     print('Running config 5')
     run_config_5()
+  elif config ==6:
+    print('Running config 6')
+    run_config_6()
+  elif config ==7:
+    print('Running config 7')
+    run_config_7()
   else:
     raise Exception('Unsupported config ' + str(config))
 
