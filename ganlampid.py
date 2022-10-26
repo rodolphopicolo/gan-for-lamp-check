@@ -365,10 +365,12 @@ def make_generator_model(version):
     return generator_model_v4()
   elif version == 5:
     return generator_model_v5()
+  elif version == 6:
+    return generator_model_v6()
   else:
     raise Exception('Unsupported generator version')
 
-GENERATOR_VERSIONS = {1, 2, 3, 4, 5}
+GENERATOR_VERSIONS = {1, 2, 3, 4, 5, 6}
 
 def generator_model_v1():
     model = tf.keras.Sequential()
@@ -534,6 +536,57 @@ def generator_model_v5():
 
     return model
 
+# %%
+def generator_model_v6():
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(96*128*3*64, use_bias=False, input_shape=(NOISE_DIM,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    print('Shape state 1:', model.output_shape)
+
+    model.add(layers.Reshape((96, 128, 3, 64)))
+
+    print('Shape state 2:', model.output_shape)
+    #assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
+
+    #model.add(layers.Conv3D(64, (16, 16, 1), strides=(5, 5, 5), padding='same', input_shape=[96, 128, 3, 64]))
+    #model.add(layers.LeakyReLU())
+    #model.add(layers.Dropout(0.3))
+    #print('Shape state 3:', model.output_shape)
+    #assert model.output_shape == (None, 96, 128, 3, 64)  # Note: None is the batch size
+
+    filters = 16
+    kernel_size = (16, 16, 1)
+    strides = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
+
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    print('Shape state 3:', model.output_shape)
+    #assert model.output_shape == (None, 480, 640, 3, 1)
+
+
+    filters = 1
+    kernel_size = (16, 16, 1)
+    strides = (5, 5, 1)
+    model.add(layers.Conv3DTranspose(filters, kernel_size, strides=strides, padding='same', use_bias=False, activation='tanh'))
+
+
+    print('Shape state 4:', model.output_shape)
+    #assert model.output_shape == (None, 480, 640, 3, 1)
+
+    model.add(layers.AveragePooling3D(pool_size=(5, 5, 1)))
+
+    print('Shape state 5:', model.output_shape)
+    assert model.output_shape == (None, 480, 640, 3, 1)
+
+    print('Model created.')
+
+    return model
+# %%
+
 
 
 def make_discriminator_model(discriminator_version):
@@ -674,6 +727,21 @@ def run_config_7():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
+def run_config_8():
+  # The idea is use config 6 changing the generator with something with a pooling (average), to try unpixelize/ungrainy the image.
+  epochs=1000000
+  generator_version=6
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0008_2022-10-26T04:20:00'
+
+  generator_optimizer_learning_rate=1e-3
+  discriminator_optimizer_learning_rate=1e-3
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
+
+
+
 def epoch_generate_image(epoch):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
   for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
@@ -694,7 +762,7 @@ def epoch_generate_image(epoch):
 def check_config():
 
   min_config = 1
-  max_config = 7
+  max_config = 8
 
   arg_id = '--config='
   for i in range(len(sys.argv)):
@@ -744,6 +812,9 @@ def main():
   elif config ==7:
     print('Running config 7')
     run_config_7()
+  elif config ==8:
+    print('Running config 8')
+    run_config_8()
   else:
     raise Exception('Unsupported config ' + str(config))
 
