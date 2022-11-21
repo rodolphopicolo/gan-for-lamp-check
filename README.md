@@ -16,6 +16,11 @@ To run this file, the images container folder needs to be passaed as argument.
 We should consider create a virtual environment (venv) with just what we need.
 pip list
 pip freeze > requirements.txt
+python3 -m pip freeze > requirements.txt
 Choose the real requirements
 python3 -m venv ~/.venv/gan_lamp
 python -m pip install -r requirements.txt
+
+
+
+I decided to work over config 6.

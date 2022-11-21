@@ -706,13 +706,15 @@ def run_config_6():
   epochs=1000000
   generator_version=2
   discriminator_version=3
-  max_checkpoint_to_keep=1
+  max_checkpoint_to_keep=5
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0006_2022-10-25T17:00:00'
+  previous_generated_model_dir = '/media/rodolphopicolo/rodolphopicolo@g/mestrado/mest/GAN/application/app/models/config_0006_2022-10-25T17:00:00'
 
   generator_optimizer_learning_rate=1e-3
   discriminator_optimizer_learning_rate=1e-3
 
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
+
 
 def run_config_7():
   epochs=1000000
@@ -740,6 +742,17 @@ def run_config_8():
 
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
+def run_config_9():
+  epochs=1000000
+  generator_version=2
+  discriminator_version=3
+  max_checkpoint_to_keep=5
+  previous_generated_model_dir = '/media/rodolphopicolo/rodolphopicolo@g/mestrado/mest/GAN/application/app/models/config_0009_2022-11-20T08:00:00'
+
+  generator_optimizer_learning_rate=1e-3
+  discriminator_optimizer_learning_rate=1e-3
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
 def epoch_generate_image(epoch):
@@ -762,7 +775,7 @@ def epoch_generate_image(epoch):
 def check_config():
 
   min_config = 1
-  max_config = 8
+  max_config = 9
 
   arg_id = '--config='
   for i in range(len(sys.argv)):
@@ -815,6 +828,9 @@ def main():
   elif config ==8:
     print('Running config 8')
     run_config_8()
+  elif config == 9:
+    print('Running config 9')
+    run_config_9()
   else:
     raise Exception('Unsupported config ' + str(config))
 
