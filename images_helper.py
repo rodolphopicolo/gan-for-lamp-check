@@ -36,7 +36,16 @@ def convert_generated_images_to_visible_mode(generated_images):
     images = images + -min_value
     images = images * proportion
     images = images.astype(dtype=int)
-    return images[:, :, :, :, 0]
+    images = images[:, :, :, :, 0]
+
+    images_rgb = np.zeros(images.shape, dtype=np.uint8)
+
+    images_rgb[:,:,:,0] = images[:,:,:,2]
+    images_rgb[:,:,:,1] = images[:,:,:,1]
+    images_rgb[:,:,:,2] = images[:,:,:,0]
+
+
+    return images_rgb
 
 
 def generate_and_save_images(model, epoch, test_input, image_dir, image_name_prefix):
@@ -53,7 +62,7 @@ def generate_and_save_images(model, epoch, test_input, image_dir, image_name_pre
     image_name = calculate_next_image_name(epoch, i, image_dir, image_name_prefix)
 
     image = images[i]
-    image = image.astype(dtype=np.uint8)
+    #image = image.astype(dtype=np.uint8)
     #plt.axis("off")
     #plt.imshow(image)
     #plt.gca().set_axis_off()

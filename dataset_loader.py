@@ -3,6 +3,8 @@ import os
 import pandas as pd
 import numpy as np
 import cv2 as cv
+import matplotlib.pyplot as plt
+#from images_helper import generate_and_save_images, check_previous_epochs, convert_generated_images_to_visible_mode
 
 MNIST_IMAGE_SHAPE = (28, 28, 1)
 LAMPS_IMAGE_SHAPE = (480, 640, 3)
@@ -52,9 +54,11 @@ def load_lamps_dataset(dataset_dir_path, dataset_metadata_file_path):
         dataset_dir_path, dataset_metadata_file_path = load_parameters()
 
     dataset_metadata = load_dataset_metadata(dataset_metadata_file_path)
+    list_metadata = []
     images = []
 
     dataset_files = os.listdir(dataset_dir_path)
+    dataset_files.sort()
     index = 0
     for file_name in dataset_files:
         file_path = os.path.join(dataset_dir_path, file_name)
@@ -73,9 +77,11 @@ def load_lamps_dataset(dataset_dir_path, dataset_metadata_file_path):
         sample['file_name'] = file_name
         sample['img'] = img
 
+        list_metadata.append(sample)
+
         index += 1
 
-    return images, dataset_metadata
+    return images, dataset_metadata, list_metadata
 
 def load_mnist_dataset():
     import tensorflow as tf
@@ -85,12 +91,29 @@ def load_mnist_dataset():
     return train_images
 
 
-def main():
-    lamps, metadata = load_lamps_dataset()
-    mnist = load_mnist_dataset()
+def save_image_minus_one_to_one(image, path):
+    #image_rgb = convert_generated_images_to_visible_mode(image)
+    image_bgr = ((image * 127.5) + 127.5).astype(dtype=np.uint8)
 
-    return lamps, mnist
+    image_rgb = np.zeros(image_bgr.shape, dtype=np.uint8)
+
+    image_rgb[:,:,0] = image_bgr[:,:,2]
+    image_rgb[:,:,1] = image_bgr[:,:,1]
+    image_rgb[:,:,2] = image_bgr[:,:,0]
+   
+    plt.imsave(path, image_rgb)
+
+def main():
+    lamps, metadata, list_metadata = load_lamps_dataset('../fotos_28_07', '../lamp-index.csv')
+    #mnist = load_mnist_dataset()
+    for metadata in list_metadata:
+        image = metadata['img']
+        name = metadata['file_name']
+        path = '/tmp/gan_images/' + name
+        save_image_minus_one_to_one(image, path)
+
+    
 
 if __name__ == '__main__':
-    lamps, mnist = main()
-    print(lamps.shape, mnist.shape)
+    lamps = main()
+    

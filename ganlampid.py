@@ -15,15 +15,21 @@ from tensorflow.keras import layers
 
 from IPython import display
 
-from dataset_loader import load_lamps_dataset
+from dataset_loader import load_lamps_dataset, save_image_minus_one_to_one
 from images_helper import generate_and_save_images, check_previous_epochs
 
 
 
+MODELS_PATH = '/media/rodolphopicolo/rodolphopicolo@g/mestrado/mest/GAN/application/app/models'
+
+
+LAMP_LABELS = {8, 5, 2, 10, 4, 6, 1, 7, 9, 3}
+
 QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT = 500
 TOTAL_IMAGES_TO_LOAD = 1
 BUFFER_SIZE = TOTAL_IMAGES_TO_LOAD
-BATCH_SIZE = TOTAL_IMAGES_TO_LOAD
+#BATCH_SIZE = TOTAL_IMAGES_TO_LOAD
+BATCH_SIZE = 1
 NOISE_DIM = 100
 num_examples_to_generate = 1
 IMAGE_NAME_PREFIX = 'image_at_epoch_'
@@ -138,27 +144,45 @@ def define_paths(previous_generated_model_dir=None):
   return paths
 
 
-def load_dataset(image_dir):
-  images, dataset_metadata = load_lamps_dataset('../fotos_28_07', '../lamp-index.csv')
-  train_images = images[:TOTAL_IMAGES_TO_LOAD]
+def load_dataset(image_dir, total_images_to_load, lamp_label):
+  images, dataset_metadata, list_metadata = load_lamps_dataset('../fotos_28_07', '../lamp-index.csv')
 
-  '''
-  for i in range(0, len(train_images)):
-    plt.axis("off")
-    img = ((train_images[i] * 127.5) + 127.5).astype(dtype=int)
-    plt.imshow(img)
-    plt.show(block=False)
+  if lamp_label == None:
+    train_images = images[:total_images_to_load]
+    buffer_size = BUFFER_SIZE
+    labels = None
+    photos = None
+  else:
+    images = []
+    labels = []
+    photos = []
+    names = []
+    for metadata in list_metadata:
+      if metadata['label'] == lamp_label:
+        images.append(metadata['img'])
+        labels.append(metadata['label'])
+        photos.append(metadata['photo'])
+        names.append(metadata['name'])
 
-  plt.show()
-  '''
+    buffer_size = len(images)
+
+    train_images = np.zeros(((len(images), len(images[0]), len(images[0][0]), len(images[0][0][0]))))
+
+    for i in range(0, len(images)):
+      image = images[i]
+      train_images[i] = image
 
   for i in range(train_images.shape[0]):
-    image_name = image_dir + '/train_image_{:04d}.png'.format(i)
-    image = ((train_images[i] * 127.5) + 127.5).astype(dtype=np.uint8)
-    #image = image.astype(dtype=np.uint8)
-    plt.imsave(image_name, image)
+    if labels == None:
+      image_name = image_dir + '/train_image_{:04d}.png'.format(i)
+    else:
+      image_name = image_dir + '/train_image_label_{:02d}_photo_{:03d}_' + names[i] + '.png'.format(labels[i], photos[i])
 
-  train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+    #image = ((train_images[i] * 127.5) + 127.5).astype(dtype=np.uint8)
+    #plt.imsave(image_name, image)
+    save_image_minus_one_to_one(train_images[i], image_name)
+
+  train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(buffer_size).batch(BATCH_SIZE)
   return train_dataset
 
 
@@ -645,7 +669,7 @@ def discriminator_model_v3():
     return model
 
 
-def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4):
+def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4, total_images_to_load=TOTAL_IMAGES_TO_LOAD, lamp_label=None):
   paths = define_paths(previous_generated_model_dir)
 
   check_models_version(paths, generator_version, discriminator_version)
@@ -656,7 +680,7 @@ def run(generator_version=1, discriminator_version=1, epochs = 100000, max_check
 
   
 
-  train_dataset = load_dataset(paths[IMAGE_DIR])
+  train_dataset = load_dataset(paths[IMAGE_DIR], total_images_to_load, lamp_label)
   cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version, generator_optimizer_learning_rate, discriminator_optimizer_learning_rate)
   train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep)
 
@@ -755,6 +779,27 @@ def run_config_9():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
+
+def run_config_9_with_label(label):
+  epochs=1000000
+  generator_version=2
+  discriminator_version=3
+  max_checkpoint_to_keep=1
+  previous_generated_model_dir = os.path.join(MODELS_PATH, 'config_0009_label_' + str(label))
+
+  generator_optimizer_learning_rate=1e-3
+  discriminator_optimizer_learning_rate=1e-3
+
+  total_images_to_load=None
+  lamp_label=label
+
+  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate, total_images_to_load=total_images_to_load, lamp_label=lamp_label)
+
+
+
+
+
+
 def epoch_generate_image(epoch):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
   for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
@@ -799,10 +844,39 @@ def check_config():
   print('Config not specified')
   return -1
 
+
+def check_lamp_label():
+  arg_id = '--label='
+  for i in range(len(sys.argv)):
+    arg = sys.argv[i]
+    if len(arg) > len(arg_id):
+      if arg[:len(arg_id)] == arg_id:
+        label = arg[len(arg_id):]
+        if label.isnumeric == False:
+          print('Invalid label: specify a number among ' + str(LAMP_LABELS))
+          return -2
+
+        label = int(label)
+
+        if not label in LAMP_LABELS:
+          print('Invalid label: specify a number among ' + str(LAMP_LABELS))
+          return -3
+
+        print('Label: ', label)
+        return label
+
+  print('Label not specified')
+  return None
+
 def main():
   config = check_config()
   if config <= 0:
     return
+
+  label = check_lamp_label()
+  if label != None:
+    if label <= 0:
+      return
 
   if config == 1:
     print('Running config 1')
@@ -828,9 +902,12 @@ def main():
   elif config ==8:
     print('Running config 8')
     run_config_8()
-  elif config == 9:
+  elif config == 9 and label == None:
     print('Running config 9')
     run_config_9()
+  elif config == 9 and label > 0:
+    print('Running config 9 label ', label)
+    run_config_9_with_label(label)
   else:
     raise Exception('Unsupported config ' + str(config))
 
