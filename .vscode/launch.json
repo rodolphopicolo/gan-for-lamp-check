@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["../fotos_28_07", "../lamp-index.csv", "--config=9", "--Xlabel=5"]
+            "args": ["../fotos_28_07", "../lamp-index.csv", "--config=9", "--label=5"]
         }
     ]
 }

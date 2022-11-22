@@ -162,7 +162,7 @@ def load_dataset(image_dir, total_images_to_load, lamp_label):
         images.append(metadata['img'])
         labels.append(metadata['label'])
         photos.append(metadata['photo'])
-        names.append(metadata['name'])
+        names.append(metadata['file_name'])
 
     buffer_size = len(images)
 
@@ -176,7 +176,7 @@ def load_dataset(image_dir, total_images_to_load, lamp_label):
     if labels == None:
       image_name = image_dir + '/train_image_{:04d}.png'.format(i)
     else:
-      image_name = image_dir + '/train_image_label_{:02d}_photo_{:03d}_' + names[i] + '.png'.format(labels[i], photos[i])
+      image_name = image_dir + '/train_image_label_{:02d}_photo_{:04d}.png'.format(labels[i], photos[i])
 
     #image = ((train_images[i] * 127.5) + 127.5).astype(dtype=np.uint8)
     #plt.imsave(image_name, image)
