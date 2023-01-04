@@ -48,10 +48,10 @@ def convert_generated_images_to_visible_mode(generated_images):
     return images_rgb
 
 
-def generate_and_save_images(model, epoch, test_input, image_dir, image_name_prefix):
+def generate_and_save_images(model, epoch, seed, image_dir, image_name_prefix):
   # Notice `training` is set to False.
   # This is so all layers run in inference mode (batchnorm).
-  predictions = model(test_input, training=False)
+  predictions = model(seed, training=False)
 
   #fig = plt.figure(figsize=(4, 4))
 

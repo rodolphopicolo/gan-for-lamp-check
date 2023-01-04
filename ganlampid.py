@@ -32,11 +32,13 @@ BUFFER_SIZE = TOTAL_IMAGES_TO_LOAD
 BATCH_SIZE = 1
 NOISE_DIM = 100
 num_examples_to_generate = 1
+NUM_PREDICTIONS_TO_GENERATE = 100
 IMAGE_NAME_PREFIX = 'image_at_epoch_'
 NOISE_IMAGE_PREFIX = 'generator_test_'
 
 MODEL_DIR = 'model_dir'
 IMAGE_DIR = 'image_dir'
+PREDICTED_IMAGE_DIR = 'predicted_image_dir'
 CHECKPOINT_DIR = 'checkpoint_dir'
 CHECKPOINT_PREFIX = 'checkpoint_prefix'
 GENERATOR_FILE_PATH = 'generator_file_path'
@@ -49,8 +51,9 @@ MODEL_VERSION_FILE_PATH = 'model_version_file_path'
 EPOCH_STEP_TO_GENERATE_IMAGE = [1, 5, 10, 100]
 
 
+
 #BASE_MODEL_DIR = './models'
-BASE_MODEL_DIR = '/home/rodolpho/Documents/mest/GAN/application/app/models'
+BASE_MODEL_DIR = MODELS_PATH
 MODEL_DIR_PATTERN = '^model_\d{4}_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$'
 
 def define_model_dir(base_model_dir):
@@ -121,6 +124,10 @@ def define_paths(previous_generated_model_dir=None):
   checkpoint_prefix = 'ckpt'
   os.makedirs(image_dir, exist_ok=True)
 
+
+  predicted_image_dir = os.path.join(model_dir, 'predicted_images')
+  os.makedirs(predicted_image_dir, exist_ok=True)
+
   generator_file_path = os.path.join(model_dir, 'generator.tf')
   discriminator_file_path = os.path.join(model_dir, 'discriminator.tf')
 
@@ -132,6 +139,7 @@ def define_paths(previous_generated_model_dir=None):
   paths = {
     MODEL_DIR: model_dir,
     IMAGE_DIR: image_dir,
+    PREDICTED_IMAGE_DIR: predicted_image_dir,
     CHECKPOINT_DIR: checkpoint_dir,
     CHECKPOINT_PREFIX: checkpoint_prefix,
     GENERATOR_FILE_PATH: generator_file_path,
@@ -348,7 +356,17 @@ def train_step(images, cross_entropy, generator, generator_optimizer, discrimina
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
 
-def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0, max_checkpoint_to_keep=2):
+def generate(generator, generator_optimizer, discriminator, discriminator_optimizer, max_checkpoint_to_keep, num_examples_to_generate, paths):
+  checkpoint_dir = paths[CHECKPOINT_DIR]
+  checkpoint_prefix = paths[CHECKPOINT_PREFIX]
+  predicted_image_dir = paths[PREDICTED_IMAGE_DIR]
+
+  checkpoint_manager = create_restore_checkpoint_manager(checkpoint_dir, checkpoint_prefix, generator, generator_optimizer, discriminator, discriminator_optimizer, max_checkpoint_to_keep, restore_last_if_exists=True)
+  seed = tf.random.normal([num_examples_to_generate, NOISE_DIM])
+
+  generate_and_save_images(generator, 0, seed, predicted_image_dir, 'generated_image_')
+
+def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=0, max_checkpoint_to_keep=2, quantity_of_epochs_to_save_checkpoint=QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT, epoch_step_to_generate_image=EPOCH_STEP_TO_GENERATE_IMAGE):
 
   checkpoint_dir = paths[CHECKPOINT_DIR]
   checkpoint_prefix = paths[CHECKPOINT_PREFIX]
@@ -365,14 +383,13 @@ def train(dataset, epochs, cross_entropy, generator, generator_optimizer, discri
       train_step(image_batch, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer)
 
     
-    #if generate_image == True and ((epoch + 1 + previous_calculated_epoch) % EPOCH_STEP_TO_GENERATE_IMAGE == 0):
-    if generate_image == True and epoch_generate_image(epoch):
+    if generate_image == True and epoch_generate_image(epoch, epoch_step_to_generate_image):
       generate_and_save_images(generator, epoch + 1 + previous_calculated_epoch, seed, image_dir, IMAGE_NAME_PREFIX)
 
     if (epoch + 1) % 50 == 0:
       display.clear_output(wait=False)
 
-    if (epoch + 1) % QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT == 0:
+    if (epoch + 1) % quantity_of_epochs_to_save_checkpoint == 0:
       checkpoint_manager.save()
 
     print ('Time for epoch {} is {} sec'.format(epoch + 1 + previous_calculated_epoch, time.time()-start))
@@ -669,22 +686,32 @@ def discriminator_model_v3():
     return model
 
 
-def run(generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4, total_images_to_load=TOTAL_IMAGES_TO_LOAD, lamp_label=None):
+def run(mode=None, generator_version=1, discriminator_version=1, epochs = 100000, max_checkpoint_to_keep=2, previous_generated_model_dir = None, generator_optimizer_learning_rate=1e-4, discriminator_optimizer_learning_rate=1e-4, total_images_to_load=TOTAL_IMAGES_TO_LOAD, lamp_label=None, quantity_of_epochs_to_save_checkpoint=QUANTITY_OF_EPOCHS_TO_SAVE_CHECKPOINT, epoch_step_to_generate_image=EPOCH_STEP_TO_GENERATE_IMAGE):
+
+  if mode == None:
+    raise Exception('Mode not specified')
+
   paths = define_paths(previous_generated_model_dir)
 
   check_models_version(paths, generator_version, discriminator_version)
 
-  previous_calculated_epoch = 0
-  if previous_generated_model_dir != None:
-    previous_calculated_epoch = check_previous_epochs(paths[IMAGE_DIR], 'image_at_epoch_')
-
-  
-
-  train_dataset = load_dataset(paths[IMAGE_DIR], total_images_to_load, lamp_label)
   cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer = create_models(paths, generator_version, discriminator_version, generator_optimizer_learning_rate, discriminator_optimizer_learning_rate)
-  train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep)
+  if mode == 'train':
+    previous_calculated_epoch = 0
+    if previous_generated_model_dir != None:
+      previous_calculated_epoch = check_previous_epochs(paths[IMAGE_DIR], 'image_at_epoch_')
 
-def run_config_1():
+    train_dataset = load_dataset(paths[IMAGE_DIR], total_images_to_load, lamp_label)
+
+    train(train_dataset, epochs, cross_entropy, generator, generator_optimizer, discriminator, discriminator_optimizer, paths, restore_last_checkpoint=True, generate_image=True, previous_calculated_epoch=previous_calculated_epoch, max_checkpoint_to_keep=max_checkpoint_to_keep, quantity_of_epochs_to_save_checkpoint=quantity_of_epochs_to_save_checkpoint, epoch_step_to_generate_image=epoch_step_to_generate_image)
+  elif mode == 'gen':
+    
+    generate(generator, generator_optimizer, discriminator, discriminator_optimizer, max_checkpoint_to_keep, NUM_PREDICTIONS_TO_GENERATE, paths)
+
+  else:
+    raise Exception('Invalid mode: ' + mode)
+
+def run_config_1(mode):
   epochs=1000000
   generator_version=2
   discriminator_version=1
@@ -692,7 +719,7 @@ def run_config_1():
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0001_2022-10-04T14:55:55'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
-def run_config_2():
+def run_config_2(mode):
   epochs=1000000
   generator_version=2
   discriminator_version=3
@@ -700,7 +727,7 @@ def run_config_2():
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0002_2022-10-08T07:43:29'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
-def run_config_3():
+def run_config_3(mode):
   epochs=1000000
   generator_version=4
   discriminator_version=3
@@ -709,7 +736,7 @@ def run_config_3():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
 
-def run_config_4():
+def run_config_4(mode):
   epochs=1000000
   generator_version=4
   discriminator_version=1
@@ -718,7 +745,7 @@ def run_config_4():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
 
-def run_config_5():
+def run_config_5(mode):
   epochs=1000000
   generator_version=5
   discriminator_version=1
@@ -726,7 +753,7 @@ def run_config_5():
   previous_generated_model_dir = '/home/rodolpho/Documents/mest/GAN/application/app/models/config_0005_2022-10-23T08:00:000'
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir)
 
-def run_config_6():
+def run_config_6(mode):
   epochs=1000000
   generator_version=2
   discriminator_version=3
@@ -740,7 +767,7 @@ def run_config_6():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
-def run_config_7():
+def run_config_7(mode):
   epochs=1000000
   generator_version=2
   discriminator_version=3
@@ -753,7 +780,7 @@ def run_config_7():
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
 
-def run_config_8():
+def run_config_8(mode):
   # The idea is use config 6 changing the generator with something with a pooling (average), to try unpixelize/ungrainy the image.
   epochs=1000000
   generator_version=6
@@ -766,7 +793,7 @@ def run_config_8():
 
   run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate)
 
-def run_config_9():
+def run_config_9(mode):
   epochs=1000000
   generator_version=2
   discriminator_version=3
@@ -780,11 +807,11 @@ def run_config_9():
 
 
 
-def run_config_9_with_label(label):
+def run_config_9_with_label(label, mode):
   epochs=1000000
   generator_version=2
   discriminator_version=3
-  max_checkpoint_to_keep=1
+  max_checkpoint_to_keep=3
   previous_generated_model_dir = os.path.join(MODELS_PATH, 'config_0009_label_' + str(label))
 
   generator_optimizer_learning_rate=1e-3
@@ -793,14 +820,17 @@ def run_config_9_with_label(label):
   total_images_to_load=None
   lamp_label=label
 
-  run(generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate, total_images_to_load=total_images_to_load, lamp_label=lamp_label)
+  quantity_of_epochs_to_save_checkpoint=20
+  epoch_step_to_generate_image = [1, 5, 10]
+
+  run(mode=mode, generator_version=generator_version, discriminator_version=discriminator_version, epochs=epochs, max_checkpoint_to_keep=max_checkpoint_to_keep, previous_generated_model_dir=previous_generated_model_dir, generator_optimizer_learning_rate=generator_optimizer_learning_rate, discriminator_optimizer_learning_rate=discriminator_optimizer_learning_rate, total_images_to_load=total_images_to_load, lamp_label=lamp_label, quantity_of_epochs_to_save_checkpoint=quantity_of_epochs_to_save_checkpoint)
 
 
 
 
 
 
-def epoch_generate_image(epoch):
+def epoch_generate_image(epoch, epoch_step_to_generate_image):
   cursor = len(EPOCH_STEP_TO_GENERATE_IMAGE) - 1
   for i in range(len(EPOCH_STEP_TO_GENERATE_IMAGE)):
     if EPOCH_STEP_TO_GENERATE_IMAGE[i] > epoch:
@@ -868,6 +898,25 @@ def check_lamp_label():
   print('Label not specified')
   return None
 
+def check_mode():
+  arg_id = '--mode='
+  for i in range(len(sys.argv)):
+    arg = sys.argv[i]
+    if len(arg) > len(arg_id):
+      if arg[:len(arg_id)] == arg_id:
+        mode = arg[len(arg_id):]
+        if mode != 'gen' and mode != 'train':
+          print('Invalid mode: specify a mode between gen and train')
+          return None
+
+        print('Mode: ', mode)
+        return mode
+
+  print('Mode not specified')
+  return None
+
+
+
 def main():
   config = check_config()
   if config <= 0:
@@ -878,36 +927,41 @@ def main():
     if label <= 0:
       return
 
+  mode = check_mode()
+  if mode == None:
+    return
+    
+
   if config == 1:
     print('Running config 1')
-    run_config_1()
+    run_config_1(mode)
   elif config ==2:
     print('Running config 2')
-    run_config_2()
+    run_config_2(mode)
   elif config ==3:
     print('Running config 3')
-    run_config_3()
+    run_config_3(mode)
   elif config ==4:
     print('Running config 4')
-    run_config_4()
+    run_config_4(mode)
   elif config ==5:
     print('Running config 5')
-    run_config_5()
+    run_config_5(mode)
   elif config ==6:
     print('Running config 6')
-    run_config_6()
+    run_config_6(mode)
   elif config ==7:
     print('Running config 7')
-    run_config_7()
+    run_config_7(mode)
   elif config ==8:
     print('Running config 8')
-    run_config_8()
+    run_config_8(mode)
   elif config == 9 and label == None:
     print('Running config 9')
-    run_config_9()
+    run_config_9(mode)
   elif config == 9 and label > 0:
-    print('Running config 9 label ', label)
-    run_config_9_with_label(label)
+    print('Running config 9 label ', label, ' mode ', mode)
+    run_config_9_with_label(label, mode)
   else:
     raise Exception('Unsupported config ' + str(config))
 

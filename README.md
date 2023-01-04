@@ -23,4 +23,27 @@ python -m pip install -r requirements.txt
 
 
 
-I decided to work over config 6.
+I have decided to work over config 9.
+
+python ganlampid.py --config=9 --label=1
+python ganlampid.py --config=9 --label=2
+python ganlampid.py --config=9 --label=3
+python ganlampid.py --config=9 --label=4
+python ganlampid.py --config=9 --label=5
+python ganlampid.py --config=9 --label=6
+python ganlampid.py --config=9 --label=7
+python ganlampid.py --config=9 --label=8
+python ganlampid.py --config=9 --label=9
+python ganlampid.py --config=9 --label=10
+
+
+python ganlampid.py --config=9 --label=1 --mode=gen
+python ganlampid.py --config=9 --label=2 --mode=gen
+python ganlampid.py --config=9 --label=3 --mode=gen
+python ganlampid.py --config=9 --label=4 --mode=gen
+python ganlampid.py --config=9 --label=5 --mode=gen
+python ganlampid.py --config=9 --label=6 --mode=gen
+python ganlampid.py --config=9 --label=7 --mode=gen
+python ganlampid.py --config=9 --label=8 --mode=gen
+python ganlampid.py --config=9 --label=9 --mode=gen
+python ganlampid.py --config=9 --label=10 --mode=gen
